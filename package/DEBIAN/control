@@ -1,0 +1,5 @@
+Package: devect
+Version: 0.1
+Maintainer: Marcos Aguayo <marcos@aguayo.es>
+Architecture: all
+Description: System stats and metrics
