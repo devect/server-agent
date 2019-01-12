@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"syscall"
 	"time"
 
@@ -21,19 +23,46 @@ const (
 	VERSION uint64 = 1
 )
 
+var Hostname = "-"
+
+func getHostname() string {
+	fmt.Println("getHostname")
+	name, _ := os.Hostname()
+	return name
+}
+
 type DiskStatus struct {
 	All  uint64 `json:"all"`
 	Used uint64 `json:"used"`
 	Free uint64 `json:"free"`
 }
 
+func getServerId() (string, error) {
+	b, err := ioutil.ReadFile("/etc/devect/devect-auth.txt")
+	str := string(b)
+	return str, err
+}
+
 func main() {
+
+	server_id, err := getServerId()
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		Hostname = getHostname()
+		runLoop(server_id)
+	}
+
+}
+
+func runLoop(server_id string) {
 	for true {
+		fmt.Println(Hostname)
 		loc, _ := time.LoadLocation("UTC")
 		start := time.Now().In(loc)
 		fmt.Println("Executing script", start)
 
-		getSystemData()
+		getSystemData(server_id)
 
 		now := time.Now().In(loc)
 		sleep_time := 60 - now.Second()
@@ -44,7 +73,7 @@ func main() {
 	}
 }
 
-func getSystemData() {
+func getSystemData(server_id string) {
 	jsonData := map[string]interface{}{
 		"version":       VERSION,
 		"disk_all":      nil,
@@ -62,6 +91,7 @@ func getSystemData() {
 		"network_io_rx": nil,
 		"disk_reads":    nil,
 		"disk_writes":   nil,
+		"hostname":      nil,
 	}
 
 	before, err := cpu.Get()
@@ -155,11 +185,13 @@ func getSystemData() {
 	jsonData["cpu_system"] = float64(after.System-before.System) / total * 100
 	jsonData["cpu_idle"] = float64(after.Idle-before.Idle) / total * 100
 
-	sendData(jsonData)
+	sendData(server_id, jsonData)
 }
 
-func sendData(jsonData map[string]interface{}) {
+func sendData(server_id string, jsonData map[string]interface{}) {
+	fmt.Println(jsonData)
 	jsonValue, _ := json.Marshal(jsonData)
+	fmt.Println(server_id)
 	_, err := http.Post("http://ws.devect.com/api/v1/server/data/8f90fb8334c368bee02018c7e7e5de59/", "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", err)
