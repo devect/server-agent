@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +15,8 @@ import (
 	"github.com/mackerelio/go-osstat/memory"
 	"github.com/mackerelio/go-osstat/network"
 	"github.com/mackerelio/go-osstat/uptime"
+	"github.com/maguayo/goInfo"
+	"github.com/shirou/gopsutil/load"
 	// "reflect"
 )
 
@@ -23,18 +25,36 @@ const (
 	VERSION uint64 = 1
 )
 
-var Hostname = "-"
-
-func getHostname() string {
-	fmt.Println("getHostname")
-	name, _ := os.Hostname()
-	return name
-}
+var GoOS string
+var Kernel string
+var Core string
+var Platform string
+var OS string
+var Hostname string
+var CPUs int
 
 type DiskStatus struct {
 	All  uint64 `json:"all"`
 	Used uint64 `json:"used"`
 	Free uint64 `json:"free"`
+}
+
+func main() {
+
+	server_id, err := getServerId()
+	server_id = strings.Replace(server_id, "\n", "", -1)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		gi := goInfo.GetInfo()
+		Kernel = gi.Kernel
+		Core = gi.Core
+		OS = gi.OS
+		Hostname = gi.Hostname
+		CPUs = gi.CPUs
+		runLoop(server_id)
+	}
+
 }
 
 func getServerId() (string, error) {
@@ -43,21 +63,8 @@ func getServerId() (string, error) {
 	return str, err
 }
 
-func main() {
-
-	server_id, err := getServerId()
-	if err != nil {
-		fmt.Println(err)
-	} else {
-		Hostname = getHostname()
-		runLoop(server_id)
-	}
-
-}
-
 func runLoop(server_id string) {
 	for true {
-		fmt.Println(Hostname)
 		loc, _ := time.LoadLocation("UTC")
 		start := time.Now().In(loc)
 		fmt.Println("Executing script", start)
@@ -75,7 +82,7 @@ func runLoop(server_id string) {
 
 func getSystemData(server_id string) {
 	jsonData := map[string]interface{}{
-		"version":       VERSION,
+		"agent_version": VERSION,
 		"disk_all":      nil,
 		"disk_used":     nil,
 		"disk_free":     nil,
@@ -91,36 +98,28 @@ func getSystemData(server_id string) {
 		"network_io_rx": nil,
 		"disk_reads":    nil,
 		"disk_writes":   nil,
-		"hostname":      nil,
+		"load_average":  nil,
+		"hostname":      Hostname,
+		"os":            OS,
+		"linux_kernel":  Kernel,
+		"cpu_name":      Core,
+		"cpu_cores":     CPUs,
+		"ip":            "127.0.0.1",
 	}
 
-	before, err := cpu.Get()
-	if err != nil {
-		return
-	}
-
-	network_before, err := network.Get()
-	if err != nil {
-		return
-	}
-
-	disks_before, err := disk.Get()
-	if err != nil {
-		return
-	}
+	before, _ := cpu.Get()
+	network_before, _ := network.Get()
+	disks_before, _ := disk.Get()
 
 	time.Sleep(time.Duration(SLEEP) * time.Second)
 
-	after, err := cpu.Get()
-	if err != nil {
-		return
-	}
+	after, _ := cpu.Get()
 	total := float64(after.Total - before.Total)
-
-	network_after, err := network.Get()
-	if err != nil {
-		return
-	}
+	network_after, _ := network.Get()
+	disks_after, _ := disk.Get()
+	disk := DiskUsage("/")
+	uptime, _ := uptime.Get()
+	memory, _ := memory.Get()
 
 	var network_io_transmit uint64 = 0
 	var network_io_receive uint64 = 0
@@ -136,11 +135,6 @@ func getSystemData(server_id string) {
 
 	jsonData["network_io_tx"] = network_io_transmit / SLEEP
 	jsonData["network_io_rx"] = network_io_receive / SLEEP
-
-	disks_after, err := disk.Get()
-	if err != nil {
-		return
-	}
 
 	var disk_io_reads uint64 = 0
 	var disk_io_writes uint64 = 0
@@ -158,23 +152,14 @@ func getSystemData(server_id string) {
 	jsonData["disk_writes"] = float64(disk_io_writes) / float64(SLEEP)
 
 	// Disk
-	disk := DiskUsage("/")
 	jsonData["disk_all"] = float64(disk.All)
 	jsonData["disk_used"] = float64(disk.Used)
 	jsonData["disk_free"] = float64(disk.Free)
 
 	// Uptime
-	uptime, err := uptime.Get()
-	if err != nil {
-		return
-	}
 	jsonData["uptime"] = uptime
 
 	// Memory
-	memory, err := memory.Get()
-	if err != nil {
-		return
-	}
 	jsonData["memory_total"] = memory.Total
 	jsonData["memory_used"] = memory.Used
 	jsonData["memory_cached"] = memory.Cached
@@ -185,14 +170,19 @@ func getSystemData(server_id string) {
 	jsonData["cpu_system"] = float64(after.System-before.System) / total * 100
 	jsonData["cpu_idle"] = float64(after.Idle-before.Idle) / total * 100
 
+	// Load Average
+	load, _ := load.Avg()
+	jsonData["load_average"] = load.Load1
+
 	sendData(server_id, jsonData)
 }
 
 func sendData(server_id string, jsonData map[string]interface{}) {
 	fmt.Println(jsonData)
 	jsonValue, _ := json.Marshal(jsonData)
-	fmt.Println(server_id)
-	_, err := http.Post("http://ws.devect.com/api/v1/server/data/8f90fb8334c368bee02018c7e7e5de59/", "application/json", bytes.NewBuffer(jsonValue))
+	url := "http://api.devect.com/api/v1/server/" + server_id + "/"
+	fmt.Println(url)
+	_, err := http.Post(url, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", err)
 	}
