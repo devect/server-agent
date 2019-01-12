@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -40,11 +42,22 @@ type DiskStatus struct {
 }
 
 func main() {
+	args := os.Args[1:]
+	if len(os.Args) > 1 {
+		if args[0] == "credentials" {
+			err := ioutil.WriteFile("/etc/devect/devect-auth.txt", []byte(args[1]), 0777)
+			if err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+	}
 
 	server_id, err := getServerId()
 	server_id = strings.Replace(server_id, "\n", "", -1)
-	if err != nil {
-		fmt.Println(err)
+
+	if err != nil || IsValidUUID(server_id) != true {
+		fmt.Println("You don't have credentials. \nRun: devect credentials 'YOUR_SERVER_ID_HERE'")
 	} else {
 		gi := goInfo.GetInfo()
 		Kernel = gi.Kernel
@@ -198,4 +211,9 @@ func DiskUsage(path string) (disk DiskStatus) {
 	disk.Free = fs.Bfree * uint64(fs.Bsize)
 	disk.Used = disk.All - disk.Free
 	return
+}
+
+func IsValidUUID(uuid string) bool {
+	r := regexp.MustCompile("^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[8|9|aA|bB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$")
+	return r.MatchString(uuid)
 }
