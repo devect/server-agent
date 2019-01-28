@@ -19,7 +19,6 @@ import (
 	"github.com/mackerelio/go-osstat/uptime"
 	"github.com/maguayo/goInfo"
 	"github.com/shirou/gopsutil/load"
-	// "reflect"
 )
 
 const (
@@ -200,7 +199,7 @@ func sendData(server_id string, jsonData map[string]interface{}) {
 	resp, err := client.Do(request)
 	if err != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", err)
-	}else{
+	} else {
 		defer resp.Body.Close()
 	}
 }
