@@ -22,7 +22,8 @@ go run main.go
 
 Build:
 ```
-go build
+go1.10 build -o devect
+mv devect package/
 ```
 
 
@@ -31,8 +32,16 @@ go build
 ## Build the program
 
 Put the binary in devect/usr/local/bin
-And execute:
+```
+mv devect package/usr/local/bin/devect
+```
 
+And execute:
 ```
 dpkg-deb --build package/ devect.deb
+```
+
+Install the .deb package:
+```
+sudo dpkg -i devect.deb
 ```

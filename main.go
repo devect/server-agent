@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	SLEEP   uint64 = 40
+	SLEEP   uint64 = 45
 	VERSION uint64 = 1
 )
 
@@ -80,7 +80,7 @@ func runLoop(server_id string) {
 	for true {
 		loc, _ := time.LoadLocation("UTC")
 		start := time.Now().In(loc)
-		fmt.Println("Executing script", start)
+		// fmt.Println("Executing script", start)
 
 		getSystemData(server_id)
 
@@ -118,6 +118,7 @@ func getSystemData(server_id string) {
 		"cpu_name":      Core,
 		"cpu_cores":     CPUs,
 		"ip":            "127.0.0.1",
+		"server_id":     server_id,
 	}
 
 	before, _ := cpu.Get()
@@ -191,13 +192,16 @@ func getSystemData(server_id string) {
 }
 
 func sendData(server_id string, jsonData map[string]interface{}) {
-	fmt.Println(jsonData)
 	jsonValue, _ := json.Marshal(jsonData)
-	url := "http://api.devect.com/api/v1/server/" + server_id + "/"
-	fmt.Println(url)
-	_, err := http.Post(url, "application/json", bytes.NewBuffer(jsonValue))
+	client := &http.Client{}
+	url := "http://ws.devect.com/api/v1/server/" + server_id + "/"
+	request, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonValue))
+	request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	resp, err := client.Do(request)
 	if err != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", err)
+	}else{
+		defer resp.Body.Close()
 	}
 }
 
